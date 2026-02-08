@@ -1,0 +1,55 @@
+{
+  "name": "dt-agent",
+  "version": "0.2.0",
+  "description": "AI Agent that interacts with DEVONthink 4.2 via JXA, powered by Claude/GPT/Gemini",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/DEVONthink_agent.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "DEVONthink": "./dist/index.js",
+    "dt-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/",
+    "check": "tsc --noEmit && eslint src/ && prettier --check src/",
+    "update": "git pull origin main && npm install && npm run build"
+  },
+  "keywords": [
+    "devonthink",
+    "ai-agent",
+    "jxa",
+    "claude",
+    "automation"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "@google/generative-ai": "^0.24.1",
+    "chalk": "^5.6.2",
+    "dotenv": "^17.2.4",
+    "openai": "^6.18.0",
+    "ora": "^9.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^25.2.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0"
+  }
+}
