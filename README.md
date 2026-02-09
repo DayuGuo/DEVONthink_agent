@@ -20,7 +20,7 @@ Related Blog：https://anotherdayu.com/2026/7710/
 
 ## Requirements
 
-- macOS with [DEVONthink 3/4](https://www.devontechnologies.com/apps/devonthink) (Pro or Server)
+- macOS with [DEVONthink 4.2](https://www.devontechnologies.com/apps/devonthink) (Pro)
 - [Node.js](https://nodejs.org/) ≥ 20
 - API key for at least one LLM provider (Anthropic / OpenAI / Google Gemini)
 
