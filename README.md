@@ -8,7 +8,7 @@ AI-powered CLI that lets you search, read, and analyze your [DEVONthink](https:/
 
 ## Demo
 
-<video src="testvideo.mp4" controls width="100%"></video>
+<video src="testvideo.gif" controls width="100%"></video>
 
 ## Highlights
 
