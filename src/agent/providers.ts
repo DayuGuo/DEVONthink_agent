@@ -506,15 +506,32 @@ class GeminiProvider implements LLMProvider {
     results: Array<{ toolCallId: string; output: string }>,
   ): void {
     // Gemini tool results go in a single function-role message.
-    // Extract functionCall names from the last model message in order, matching by index.
+    // Extract functionCall names from the last model message for name matching.
     const msgs = history._messages as GeminiContent[];
     const lastModel = [...msgs].reverse().find((m) => m.role === "model");
-    const functionCallParts = (lastModel?.parts || []).filter(
-      (p): p is GeminiPart & { functionCall: { name: string } } => "functionCall" in p,
-    );
 
-    const parts: GeminiPart[] = results.map((r, i) => {
-      const matchingCall = functionCallParts[i];
+    // Build a lookup map from toolCallId → functionCall name for robust matching
+    // (avoids fragile positional index matching if order ever diverges)
+    const idToName = new Map<string, string>();
+    const lastModelParts = lastModel?.parts || [];
+    let fcIdx = 0;
+    for (const p of lastModelParts) {
+      if ("functionCall" in p) {
+        // Gemini tool call IDs are generated as "gemini-tc-{timestamp}-{index}"
+        // Match by position within functionCallParts since Gemini doesn't have native IDs
+        const matchingResult = results[fcIdx];
+        if (matchingResult) {
+          idToName.set(
+            matchingResult.toolCallId,
+            (p as GeminiPart & { functionCall: { name: string } }).functionCall.name,
+          );
+        }
+        fcIdx++;
+      }
+    }
+
+    const parts: GeminiPart[] = results.map((r) => {
+      const name = idToName.get(r.toolCallId) || "unknown";
       // Gemini API requires functionResponse.response to be an Object,
       // not an Array or primitive value. If the tool returns an array
       // or non-object type, wrap it as { result: ... }
@@ -525,13 +542,14 @@ class GeminiProvider implements LLMProvider {
           : { result: parsed };
       return {
         functionResponse: {
-          name: matchingCall?.functionCall.name || "unknown",
+          name,
           response: responseObj,
         },
       };
     });
 
-    // Gemini requires function responses as "user" role (actually function role)
+    // Gemini requires function responses in a "function" role message
+    // Note: TypeScript types may not expose "function" role, so we use type assertion
     (history._messages as GeminiContent[]).push({
       role: "function" as GeminiContent["role"],
       parts,

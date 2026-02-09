@@ -23,8 +23,8 @@ import { buildSystemPrompt } from "./system-prompt.js";
 
 // ─── Retry Configuration ─────────────────────────────────
 
-const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 2000; // 2s, 4s, 8s exponential backoff
+const MAX_RETRIES = 5;
+const RETRY_BASE_DELAY_MS = 3000; // 3s, 6s, 12s, 24s, 48s exponential backoff
 const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 
 // ─── Types ───────────────────────────────────────────────
@@ -216,9 +216,20 @@ export async function agentLoop(
  */
 function isRetryableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return RETRYABLE_STATUS_CODES.some(
-    (code) => msg.includes(`${code}`) || msg.includes("overloaded"),
-  );
+  // HTTP status codes: rate limit (429) and server errors (5xx)
+  const isHttpRetryable = RETRYABLE_STATUS_CODES.some((code) => msg.includes(`${code}`));
+  // Network-level errors: connection reset, timeout, DNS, fetch failures
+  const isNetworkError =
+    msg.includes("overloaded") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("ENOTFOUND") ||
+    msg.includes("fetch") ||
+    msg.includes("network") ||
+    msg.includes("socket") ||
+    msg.includes("EHOSTUNREACH") ||
+    msg.includes("EAI_AGAIN");
+  return isHttpRetryable || isNetworkError;
 }
 
 /**

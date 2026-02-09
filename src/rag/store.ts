@@ -66,6 +66,7 @@ export interface SearchResult {
 export class VectorStore {
   private chunks: ChunkMeta[] = [];
   private vectors: Float32Array = new Float32Array(0);
+  private vectorsUsed = 0;
   private meta: IndexMeta;
   private dimensions: number;
   private loaded = false;
@@ -102,6 +103,7 @@ export class VectorStore {
         const ab = new ArrayBuffer(buf.length);
         new Uint8Array(ab).set(buf);
         this.vectors = new Float32Array(ab);
+        this.vectorsUsed = this.vectors.length;
       }
 
       this.loaded = true;
@@ -121,10 +123,11 @@ export class VectorStore {
     this.meta.lastUpdated = new Date().toISOString();
     this.meta.dimensions = this.dimensions;
 
-    // Write vectors as binary Float32 (use byteOffset/byteLength for safety)
+    // Write only the used portion of vectors as binary Float32
+    const usedBytes = this.vectorsUsed * Float32Array.BYTES_PER_ELEMENT;
     writeFileSync(
       VECTORS_PATH,
-      Buffer.from(this.vectors.buffer, this.vectors.byteOffset, this.vectors.byteLength),
+      Buffer.from(this.vectors.buffer, 0, usedBytes),
     );
 
     // Write chunks as JSON (no vectors — they're in the binary file)
@@ -180,15 +183,25 @@ export class VectorStore {
     // Append new chunks metadata
     this.chunks.push(...newChunks);
 
-    // Append new vectors to Float32Array
-    const oldLength = this.vectors.length;
+    // Append new vectors with amortized growth (O(n) total instead of O(n²))
     const addLength = newVectors.length * this.dimensions;
-    const expanded = new Float32Array(oldLength + addLength);
-    expanded.set(this.vectors);
-    for (let i = 0; i < newVectors.length; i++) {
-      expanded.set(newVectors[i], oldLength + i * this.dimensions);
+    const needed = this.vectorsUsed + addLength;
+    if (needed > this.vectors.length) {
+      // Double capacity or use needed size, whichever is larger
+      const newCapacity = Math.max(needed, this.vectors.length * 2, 4096);
+      const expanded = new Float32Array(newCapacity);
+      if (this.vectorsUsed > 0) {
+        expanded.set(this.vectors.subarray(0, this.vectorsUsed));
+      }
+      this.vectors = expanded;
     }
-    this.vectors = expanded;
+    for (let i = 0; i < newVectors.length; i++) {
+      const offset = this.vectorsUsed + i * this.dimensions;
+      for (let d = 0; d < this.dimensions; d++) {
+        this.vectors[offset + d] = newVectors[i][d];
+      }
+    }
+    this.vectorsUsed += addLength;
 
     // Update document tracking
     this.meta.documents[uuid] = {
@@ -207,7 +220,7 @@ export class VectorStore {
 
     if (removeIndices.size === 0) return;
 
-    // Filter chunks and rebuild vector array
+    // Filter chunks and compact vectors in-place (no reallocation)
     const newChunks: ChunkMeta[] = [];
     const keepIndices: number[] = [];
     this.chunks.forEach((c, i) => {
@@ -217,17 +230,21 @@ export class VectorStore {
       }
     });
 
-    const newVectors = new Float32Array(keepIndices.length * this.dimensions);
-    keepIndices.forEach((oldIdx, newIdx) => {
+    // Compact vectors in-place to avoid unnecessary memory allocation
+    let writePos = 0;
+    for (const oldIdx of keepIndices) {
       const src = oldIdx * this.dimensions;
-      const dst = newIdx * this.dimensions;
-      for (let d = 0; d < this.dimensions; d++) {
-        newVectors[dst + d] = this.vectors[src + d];
+      const dst = writePos * this.dimensions;
+      if (src !== dst) {
+        for (let d = 0; d < this.dimensions; d++) {
+          this.vectors[dst + d] = this.vectors[src + d];
+        }
       }
-    });
+      writePos++;
+    }
 
     this.chunks = newChunks;
-    this.vectors = newVectors;
+    this.vectorsUsed = keepIndices.length * this.dimensions;
     delete this.meta.documents[uuid];
   }
 

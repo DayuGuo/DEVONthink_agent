@@ -60,7 +60,6 @@ export async function listAllRecords(database?: string) {
       recordType: string;
       database: string;
       modificationDate: string;
-      wordCount: number;
     }>
-  >(listAllRecordsScript(database), 60_000);
+  >(listAllRecordsScript(database), 180_000); // 3 min timeout for large databases
 }

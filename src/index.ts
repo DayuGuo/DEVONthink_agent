@@ -133,6 +133,16 @@ async function singleQuery(query: string, config: AgentConfig): Promise<void> {
   } else {
     console.log(result.text);
   }
+
+  // Display token usage and cost for single query mode
+  const model = config.model || getDefaultModel(config.providerName);
+  const costStr = formatCost(model, result.usage);
+  log.info(
+    chalk.gray(
+      `[${config.providerName}/${model} · ${result.iterations} iter · ${result.toolCalls.length} tools` +
+        ` · ↑${result.usage.inputTokens.toLocaleString()} ↓${result.usage.outputTokens.toLocaleString()} tokens${costStr}]`,
+    ),
+  );
 }
 
 // ─── Interactive Chat Mode ──────────────────────────────
@@ -319,6 +329,17 @@ async function interactiveMode(config: AgentConfig): Promise<void> {
 
             lastResponse = result.text;
 
+            // Inject a summary of the expansion result into main history
+            // so subsequent conversation has context about the report
+            provider.pushUserMessage(
+              history,
+              `[System: Research expansion on "${cmdArg}" was completed. The report is available via /export.]`,
+            );
+            provider.pushAssistantText(
+              history,
+              `I completed a research expansion analysis on "${cmdArg}". The full report has been generated. You can export it with /export or ask me follow-up questions about it.`,
+            );
+
             // Accumulate session usage
             sessionUsage.inputTokens += result.usage.inputTokens;
             sessionUsage.outputTokens += result.usage.outputTokens;
@@ -436,24 +457,33 @@ async function interactiveMode(config: AgentConfig): Promise<void> {
           const msgs = history._messages as Array<{ role?: string; content?: unknown }>;
           const oldLen = msgs.length;
 
-          // Find real user message indices (not tool_result for Anthropic)
-          const userIndices: number[] = [];
+          // Find safe cut points: indices where a real user message starts a new exchange.
+          // A "safe" cut point ensures we never split a tool_use/tool_result pair.
+          // For Anthropic: real user messages have string content (not array tool_results).
+          // For OpenAI: real user messages have role "user" (tool results have role "tool").
+          // For Gemini: real user messages have text parts (tool results have functionResponse parts).
+          const safeCutPoints: number[] = [];
           for (let i = 0; i < msgs.length; i++) {
             const m = msgs[i];
             if (m.role !== "user") continue;
-            // Anthropic uses role:"user" for both user messages and tool_results
-            // Tool results have content as an array, real user messages have a string
+            // Anthropic: role "user" is shared with tool_results (content is array)
             if (provider.name === "anthropic" && typeof m.content !== "string") continue;
-            userIndices.push(i);
+            // Gemini: role "user" is shared with functionResponse (parts contain functionResponse)
+            if (provider.name === "gemini" && Array.isArray(m.content)) {
+              const parts = m.content as Array<Record<string, unknown>>;
+              if (parts.some((p) => "functionResponse" in p)) continue;
+            }
+            // OpenAI: tool results have role "tool", not "user", so no filtering needed
+            safeCutPoints.push(i);
           }
 
-          if (userIndices.length <= 2) {
+          if (safeCutPoints.length <= 2) {
             log.info("History is already compact.");
             continue;
           }
 
           // Keep from the 2nd-to-last real user message onwards (≈ 2 exchanges)
-          const keepFrom = userIndices[userIndices.length - 2];
+          const keepFrom = safeCutPoints[safeCutPoints.length - 2];
           history._messages = msgs.slice(keepFrom) as unknown[];
           const newLen = (history._messages as unknown[]).length;
           log.success(

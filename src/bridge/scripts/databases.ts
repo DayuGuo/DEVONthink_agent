@@ -17,6 +17,7 @@ export function listAllRecordsScript(database?: string): string {
   const app = Application("DEVONthink");
   const dbFilter = ${dbFilter};
   const allDbs = app.databases();
+  const skip = {"group":1,"smart group":1,"feed":1,"picture":1,"movie":1,"sound":1,"unknown":1};
   const out = [];
   for (let d = 0; d < allDbs.length; d++) {
     const db = allDbs[d];
@@ -24,19 +25,18 @@ export function listAllRecordsScript(database?: string): string {
     if (dbFilter && dbName !== dbFilter) continue;
     const records = app.search("*", { in: db.root() });
     for (let i = 0; i < records.length; i++) {
-      const r = records[i];
-      const rType = r.recordType();
-      if (rType === "group" || rType === "smart group" || rType === "feed"
-          || rType === "picture" || rType === "movie" || rType === "sound"
-          || rType === "unknown") continue;
-      out.push({
-        uuid: r.uuid(),
-        name: r.name(),
-        recordType: rType,
-        database: dbName,
-        modificationDate: r.modificationDate().toISOString(),
-        wordCount: r.wordCount(),
-      });
+      try {
+        const r = records[i];
+        const rType = r.recordType();
+        if (skip[rType]) continue;
+        out.push({
+          uuid: r.uuid(),
+          name: r.name(),
+          recordType: rType,
+          database: dbName,
+          modificationDate: r.modificationDate().toISOString(),
+        });
+      } catch(e) { /* skip problematic records */ }
     }
   }
   return JSON.stringify(out);

@@ -174,49 +174,55 @@ export async function hybridSearch(
     }
   }
 
-  // ═══ Path 3: DEVONthink "See Also" ═══
+  // ═══ Path 3: DEVONthink "See Also" (multi-seed) ═══
   const relatedEnabled = options.enableRelated !== false;
   if (relatedEnabled && results.size > 0) {
-    // Use the highest-scored document as seed
+    // Use up to 3 top-scored documents as seeds to reduce single-seed bias.
+    // If the top result is a noise hit, other seeds compensate.
     const sorted = [...results.values()].sort((a, b) => b.score - a.score);
-    const seed = sorted[0];
+    const seeds = sorted.slice(0, Math.min(3, sorted.length));
+    const seenUuids = new Set(seeds.map((s) => s.uuid));
+    let relatedFound = false;
 
-    try {
-      const related = (await dt.getRelatedRecords(seed.uuid, 10)) as Array<{
-        uuid: string;
-        name: string;
-        score: number;
-        recordType: string;
-        database: string;
-      }>;
+    for (const seed of seeds) {
+      try {
+        const related = (await dt.getRelatedRecords(seed.uuid, 8)) as Array<{
+          uuid: string;
+          name: string;
+          score: number;
+          recordType: string;
+          database: string;
+        }>;
 
-      if (Array.isArray(related)) {
-        searchPaths.push("related");
-        for (const r of related) {
-          if (r.uuid === seed.uuid) continue; // Skip seed itself
-          const normalized = normalizeRelatedScore(r.score);
+        if (Array.isArray(related)) {
+          relatedFound = true;
+          for (const r of related) {
+            if (seenUuids.has(r.uuid)) continue; // Skip seeds themselves
+            const normalized = normalizeRelatedScore(r.score);
 
-          const existing = results.get(r.uuid);
-          if (existing) {
-            existing.score = Math.min(1, existing.score + 0.15);
-            if (!existing.matchedBy.includes("related")) {
-              existing.matchedBy.push("related");
+            const existing = results.get(r.uuid);
+            if (existing) {
+              existing.score = Math.min(1, existing.score + 0.15);
+              if (!existing.matchedBy.includes("related")) {
+                existing.matchedBy.push("related");
+              }
+            } else {
+              results.set(r.uuid, {
+                uuid: r.uuid,
+                name: r.name,
+                database: r.database,
+                recordType: r.recordType,
+                score: normalized * 0.6,
+                matchedBy: ["related"],
+              });
             }
-          } else {
-            results.set(r.uuid, {
-              uuid: r.uuid,
-              name: r.name,
-              database: r.database,
-              recordType: r.recordType,
-              score: normalized * 0.6,
-              matchedBy: ["related"],
-            });
           }
         }
+      } catch {
+        // Related search failed for this seed — try next
       }
-    } catch {
-      // Related search failed — continue
     }
+    if (relatedFound) searchPaths.push("related");
   }
 
   // ═══ Merge & Rank ═══

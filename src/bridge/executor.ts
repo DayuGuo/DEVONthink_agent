@@ -23,7 +23,7 @@ export async function runJXA(
   try {
     const { stdout } = await exec("osascript", ["-l", "JavaScript", "-e", script], {
       timeout,
-      maxBuffer: 10 * 1024 * 1024, // 10 MB
+      maxBuffer: 100 * 1024 * 1024, // 100 MB — large databases (6GB+) produce big JSON
       env: { ...process.env, LANG: "en_US.UTF-8" },
     });
     return stdout.trim();
