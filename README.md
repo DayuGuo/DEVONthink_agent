@@ -6,9 +6,7 @@ AI-powered CLI that lets you search, read, and analyze your [DEVONthink](https:/
 >
 > **Read-only by design** — your data is never modified.
 
-## Demo
-
-<video src="testvideo.gif" controls width="100%"></video>
+Demo: https://github.com/DayuGuo/DEVONthink_agent/blob/main/testvideo.gif
 
 ## Highlights
 
