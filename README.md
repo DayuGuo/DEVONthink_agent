@@ -8,6 +8,8 @@ AI-powered CLI that lets you search, read, and analyze your [DEVONthink](https:/
 
 Demo: https://github.com/DayuGuo/DEVONthink_agent/blob/main/testvideo.gif
 
+Related Blog：https://anotherdayu.com/2026/7710/
+
 ## Highlights
 
 - **Hybrid RAG Search** — keyword + semantic + DEVONthink AI ("See Also"), fused & ranked
